@@ -2,6 +2,7 @@
 
 require 'sinatra/base'
 require 'pi_piper'
+require 'json'
 
 class Driver < Sinatra::Base
 
@@ -11,7 +12,17 @@ class Driver < Sinatra::Base
   end
 
   get '/' do
-    'Check this out'
+    { name: 'ffr-driver', status: 'UP' }.to_json
+  end
+
+  get '/config' do
+    erb :config
+  end
+
+  post '/config' do
+    puts "Received elasticsearchLocation #{params[:elasticsearchLocation]}"
+    # Connect to ES in future and kick off a run here
+    erb :monitoring
   end
 
   get '/on' do
