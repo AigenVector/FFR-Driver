@@ -3,8 +3,6 @@
 require 'sinatra/base'
 require 'pi_piper'
 
-#pin = PiPiper::Pin.new(:pin => 2, :direction => :out)
-
 class Driver < Sinatra::Base
 
   configure do 
