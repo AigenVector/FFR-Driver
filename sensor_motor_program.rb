@@ -3,12 +3,13 @@
 require 'elasticsearch'
 require 'pi_piper'
 
+
 #Thread.abort_on_exception =true
 
 
 #defining elasticsearch index
 
-es = Elasticsearch::Client.new url: ARGV[0], log: true
+es = Elasticsearch::Client.new url: ARGV[0]
 index_exists = es.indices.exists index: "motortest-project-index"
 if !index_exists
 puts "Index \"motortest-project-index\" does not exist. Creating..."
@@ -71,7 +72,7 @@ running = true
             flowrate[i] = value * 500 / 1023
            # puts "Flowrate for thread #{i} = #{flowrate[i]}"
       # Generating sensor
-     
+    next if value ==0
     es.index index: 'motortest-project-index',
           type: 'sensor_data',
           body: {
@@ -80,24 +81,36 @@ running = true
               value: flowrate[i]
                 }
             sleep(0.25)
-      end
+
+     end
   end
 end
 
 # Expeimental motor testing
 motorpin = PiPiper::Pin.new(:pin => 4, :direction => :out)
-
+valvepin = PiPiper::Pin.new( :pin =>17, :direction => :out)
 while running
-  print "\nSeconds ->"
+
+print "\nSeconds ->"
   seconds = STDIN.gets.chomp
+  print "\nValveOpen sec ->"
+  valvesec = STDIN.gets.chomp
   if seconds =~ /\A[-+]?[0-9]*\.?[0-9]+\Z/
   puts "Test starts for pumping #{seconds} seconds "
-  motorpin.on
+    (1..20).each do |i|
+   motorpin.on
   sleep seconds.to_f
   motorpin.off
+  sleep 2
+  valvepin.on
+  sleep valvesec.to_f
+  valvepin.off
+  sleep 5
+ end
+
   else
     running = false
-end
+  end
 end
 flowsensor_on = false 
 sensorthreads.each { | thr | thr.join }
