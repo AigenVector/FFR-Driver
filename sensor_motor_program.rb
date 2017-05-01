@@ -3,7 +3,6 @@
 require 'elasticsearch'
 require 'pi_piper'
 
-
 #Thread.abort_on_exception =true
 
 
@@ -72,6 +71,7 @@ running = true
             flowrate[i] = value * 500 / 1023
            # puts "Flowrate for thread #{i} = #{flowrate[i]}"
       # Generating sensor
+
     next if value ==0
     es.index index: 'motortest-project-index',
           type: 'sensor_data',
@@ -81,7 +81,6 @@ running = true
               value: flowrate[i]
                 }
             sleep(0.25)
-
      end
   end
 end
@@ -112,6 +111,6 @@ print "\nSeconds ->"
     running = false
   end
 end
-flowsensor_on = false 
+flowsensor_on = false
 sensorthreads.each { | thr | thr.join }
 puts "Data generation complete"
