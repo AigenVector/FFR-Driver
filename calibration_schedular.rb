@@ -48,9 +48,9 @@ if !index_exists
       }, wait_for_active_shards: 1
   puts "Index created."
 end
-
-input_valid? = false
-while !input_valid? do
+=begin
+input_valid = false
+while !input_valid do
   # Ask for values
   print "\nMotor pump Seconds ->"
   seconds = STDIN.gets.chomp
@@ -61,11 +61,12 @@ while !input_valid? do
   if seconds =~ /\A[-+]?[0-9]*\.?[0-9]+\Z/ &&
     valvesec =~ /\A[-+]?[0-9]*\.?[0-9]+\Z/
     puts "Test starts for pumping #{seconds} seconds and valves #{valvesec}"
-    input_valid? = true
+    input_valid = true
   else
     puts "Invalid input, please try again."
   end
 end
+=end
 
 puts "Generating data now."
 #Threading Sensor readings
@@ -91,7 +92,7 @@ running = true
             sensor_number: i,
             value: flowrate[i]
         }
-      sleep(0.1)
+      sleep(0.01)
     end
   end
 end
@@ -115,38 +116,43 @@ while calibrationon do
   # we'll use the average to seed our high/low calculations next
   # if count >= 0  && count <= 100
   count += 1
+  sleep(0.01)
+  next if count <=500
   tot += reading
-  average = tot/count
-  variance = (reading-average)**2/count
+  average = tot/(count-500)
+  variance = (reading-average)**2/(count-500)
   stdev = Math.sqrt(variance)
   if count == 2000
-    puts "Calibrated after 2000 readings...average at #{average} finding systol/diastol cycles..."
+   averagestag = average
+   puts "Calibrated after 2000 readings...average at #{average} finding systol/diastol cycles..."
   end
 
   if count >= 2000 and count < 4000
     # set up some counters to track what the
     # highest throughput (potential systol) and
     # lowest throughput(potential diastol)  we have seen are
-    highest ||= [average.to_i]
-    lowest ||= [average.to_i]
+    highest ||= [averagestag.to_i]
+    lowest ||= [averagestag.to_i]
     avg_systol = highest.reduce(:+) / highest.size
     avg_diastol = lowest.reduce(:+) / lowest.size
     # Do the actual comparison per loop maybe make it the average
 
-    if reading > avg_systol && stdev < 3 && stdev > -3
+#    if reading > avg_systol && stdev < 3 && stdev > -3
+    if reading > averagestag && stdev < 2 && stdev > -2
       highest.push(reading)
-      puts "New high of #{highest} found."
-    elsif reading < avg_diastol  && stdev <3 && stdev >-3
+      puts "New high of #{avg_systol} found."
+#    elsif reading < avg_diastol  && stdev <3 && stdev >-3
+    elsif reading < averagestag  && stdev < 2 && stdev > -2
       lowest.push(reading)
-      puts "New low of #{lowest} found."
+      puts "New low of #{avg_diastol} found."
     end
   end
 
   if count == 4000
     puts "Count is #{count}"
     # Keep the end users busy with some shiny TEXTTT!!!!
-    avg_systol = highest.reduce(:+) / highest.size
-    avg_diastol = lowest.reduce(:+) / lowest.size
+   # avg_systol = highest.reduce(:+) / highest.size
+   # avg_diastol = lowest.reduce(:+) / lowest.size
     puts "Proceeding with presumed systol of #{avg_systol} and presumed diastol of #{avg_diastol}..."
   end
   if count >= 4000 && count < 6000
@@ -160,9 +166,12 @@ while calibrationon do
     state ||= :none
 
     # figure out if we are nearest to systol (highest) or diastol (lowest)
-    diff_to_systol = (avg_systol - reading).abs
-    diff_to_diastol = (avg_diastol - reading).abs
-    if diff_to_systol > diff_to_diastol
+    midpoint = (avg_systol + avg_diastol)/2
+    
+   # diff_to_systol = (avg_systol - reading).abs
+   # diff_to_diastol = (avg_diastol - reading).abs
+    if reading <= midpoint  
+   # diff_to_systol > diff_to_diastol
       puts "Reading is in diastol range..."
       # we are diastol!!!
       case state
@@ -207,6 +216,9 @@ while calibrationon do
   end
   calibrationon = false if count > 6000
 end
+=begin
+motorpin = PiPiper::Pin.new(:pin => 4, :direction => :out)
+valvepin = PiPiper::Pin.new(:pin => 17, :direction => :out)
 
 # Scheduled mode!!!
 while true do
@@ -227,3 +239,4 @@ while true do
     state = :diastol
   end
 end
+=end 
