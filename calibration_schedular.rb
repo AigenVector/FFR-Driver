@@ -66,10 +66,10 @@ running = true
               value = ((raw[1] & 3) << 8) + raw[2]
              # puts "The flowrate value is #{value}"
             end
+            next if value == 0
             flowrate[i] = value * 500 / 1023
            # puts "Flowrate for thread #{i} = #{flowrate[i]}"
       # Generating sensor
-      next if value ==0
     es.index index: 'motortest-project-index',
           type: 'sensor_data',
           body: {
@@ -77,7 +77,7 @@ running = true
               sensor_number: i,
               value: flowrate[i]
                 }
-            sleep(0.2)
+            sleep(0.1)
       end
   end
 end
@@ -89,20 +89,19 @@ tot = 0
 average = 0
 variance = 0
 stdev = 0
-calibrationon=true
-while calibrationon do
+calibrationon = true
 
-  reading = flowrate[0]
+while calibrationon do
+ reading = flowrate[0]
   next if reading.nil?
-  next if reading ==0
+  next if reading <= 0
+  puts "Reading is #{reading} at count #{count}"
   # start accumulating an average for proof that
   # we are, in fact, getting consistent flow...
   #
   # we'll use the average to seed our high/low calculations next
  # if count >= 0  && count <= 100 
-    until count >= 5000 do
-    if reading >0 
-     count += 1
+    count += 1
     tot += reading
     average = tot/count
     variance = (reading-average)**2/count
@@ -113,10 +112,10 @@ while calibrationon do
   #  puts "Awaiting flow or sensor read incorrectly..."
    # next
  # end
-  if count == 1000
-    puts "Calibrated after 1000 readings...average at #{average} finding systol/diastol cycles..."
+  if count == 2000
+    puts "Calibrated after 2000 readings...average at #{average} finding systol/diastol cycles..."
   end
-  if count >= 1000 and count < 2000
+  if count >= 2000 and count < 4000
    # set up some counters to track what the
     # highest throughput (potential systol) and
     # lowest throughput(potential diastol)  we have seen are
@@ -134,14 +133,14 @@ while calibrationon do
       puts "New low of #{lowest} found."
     end
   end
-  if count == 2000
+  if count == 4000
   puts "Count is #{count}"
     # Keep the end users busy with some shiny TEXTTT!!!!
     avg_systol = highest.reduce(:+) / highest.size
     avg_diastol = lowest.reduce(:+) / lowest.size
     puts "Proceeding with presumed systol of #{avg_systol} and presumed diastol of #{avg_diastol}..."
   end
-  if count >=2000 && count <4000
+  if count >=4000 && count <6000
     # set up our variables if needed
     systol_duration_total ||= 0
     systol_count ||= 0
@@ -197,7 +196,7 @@ while calibrationon do
     puts "Average systol duration at #{systol_duration_total.to_f / systol_count}s" if systol_count > 0
     puts "Average diastol duration at #{diastol_duration_total.to_f / diastol_count}s" if diastol_count > 0
   end
-  if count >=4000
+  if count >=6000
     diff_to_systol = (avg_systol - reading).abs
     diff_to_diastol = (avg_diastol - reading).abs
     if diff_to_systol > diff_to_diastol
@@ -217,22 +216,34 @@ while calibrationon do
         # we are _still_ systol and waiting for the damn pump to switch back over
       end
     end
-  end
-  
-end
-end
-calibrationon = false 
-end 
+  calibrationon = false if count > 6000
+  end 
 
-# Scheduled mode!!!
-while !calibrationon do
-  if state == :diastol
-    puts "Flipping to diastol..."
-    sleep (diastol_duration_total.to_f / diastol_count)
-    state = :systol
-  elsif state == :systol
-    puts "Flipping to systol..."
-    sleep (systol_duration_total.to_f / systol_count)
-    state = :diastol
+      print "\nMotor pump Seconds ->"
+      seconds = STDIN.gets.chomp
+      print "\nValveOpen sec ->"
+      valvesec = STDIN.gets.chomp
+     if seconds =~ /\A[-+]?[0-9]*\.?[0-9]+\Z/
+        puts "Test starts for pumping #{seconds} seconds "
+
+  # Scheduled mode!!!
+  if count > 6000 && count < 20000
+    if state == :diastol
+      puts "Flipping to diastol..."
+      sleep (diastol_duration_total.to_f / diastol_count)
+      state = :systol
+    elsif state == :systol
+         puts "Test starts for pumping #{seconds} seconds "
+             motorpin.on
+             sleep seconds.to_f
+             motorpin.off
+             valvepin.on
+             sleep valvesec.to_f
+            valvepin.off
+            sleeptime = (systol_duration_total.to_f / systol_count)-seconds.to_f - valvesec.to_f
+      sleep (sleeptime)
+      state = :diastol
+    end
   end
+end
 end
