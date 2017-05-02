@@ -10,48 +10,65 @@ Thread.abort_on_exception = true
 es = Elasticsearch::Client.new url: ARGV[0]
 index_exists = es.indices.exists index: "motortest-project-index"
 if !index_exists
-puts "Index \"motortest-project-index\" does not exist. Creating..."
-es.indices.create index: "motortest-project-index",
-    body: {
-        settings: {
-            number_of_shards: 1
-        },
-        mappings: {
-            sensor_data: {
-                properties: {
-                    timestamp: {
-                        type: 'date',
-                        format: 'epoch_millis',
-                        index: 'not_analyzed'
-                    },
-                    sensor_number: {
-                        type: 'integer',
-                        index: 'not_analyzed',
-                        fields: {
-                            raw: {
-                                type: 'keyword'
-                            }
-                        }
-                    },
-                    value: {
-                        type: 'double',
-                        index: 'not_analyzed',
-                        fields: {
-                            raw: {
-                                type: 'keyword'
-                            }
-                        }
-                    },
-                }
-            }
-        }
-    }, wait_for_active_shards: 1
-puts "Index created."
+  puts "Index \"motortest-project-index\" does not exist. Creating..."
+  es.indices.create index: "motortest-project-index",
+      body: {
+          settings: {
+              number_of_shards: 1
+          },
+          mappings: {
+              sensor_data: {
+                  properties: {
+                      timestamp: {
+                          type: 'date',
+                          format: 'epoch_millis',
+                          index: 'not_analyzed'
+                      },
+                      sensor_number: {
+                          type: 'integer',
+                          index: 'not_analyzed',
+                          fields: {
+                              raw: {
+                                  type: 'keyword'
+                              }
+                          }
+                      },
+                      value: {
+                          type: 'double',
+                          index: 'not_analyzed',
+                          fields: {
+                              raw: {
+                                  type: 'keyword'
+                              }
+                          }
+                      },
+                  }
+              }
+          }
+      }, wait_for_active_shards: 1
+  puts "Index created."
 end
+
+input_valid? = false
+while !input_valid? do
+  # Ask for values
+  print "\nMotor pump Seconds ->"
+  seconds = STDIN.gets.chomp
+  print "\nValveOpen sec ->"
+  valvesec = STDIN.gets.chomp
+
+  # go into scheduled mode
+  if seconds =~ /\A[-+]?[0-9]*\.?[0-9]+\Z/ &&
+    valvesec =~ /\A[-+]?[0-9]*\.?[0-9]+\Z/
+    puts "Test starts for pumping #{seconds} seconds and valves #{valvesec}"
+    input_valid? = true
+  else
+    puts "Invalid input, please try again."
+  end
+end
+
 puts "Generating data now."
-
 #Threading Sensor readings
-
 sensorthreads = Array.new
 flowrate = Array.new
 flowsensor_on = true
@@ -59,29 +76,25 @@ running = true
 
 (0..0).each do |i|
   sensorthreads[i] = Thread.new do
-        while flowsensor_on do
-            value = 0
-            PiPiper::Spi.begin do |spi|
-              raw = spi.write [1, (8 + i) << 4, 0]
-              value = ((raw[1] & 3) << 8) + raw[2]
-             # puts "The flowrate value is #{value}"
-            end
-            next if value == 0
-            flowrate[i] = value * 500 / 1023
-           # puts "Flowrate for thread #{i} = #{flowrate[i]}"
-      # Generating sensor
-    es.index index: 'motortest-project-index',
-          type: 'sensor_data',
-          body: {
-              timestamp: (Time.now.to_f * 1000.0).to_i,
-              sensor_number: i,
-              value: flowrate[i]
-                }
-            sleep(0.1)
+    while flowsensor_on do
+      value = 0
+      PiPiper::Spi.begin do |spi|
+        raw = spi.write [1, (8 + i) << 4, 0]
+        value = ((raw[1] & 3) << 8) + raw[2]
       end
+      next if value == 0
+      flowrate[i] = value * 500 / 1023
+      es.index index: 'motortest-project-index',
+        type: 'sensor_data',
+        body: {
+            timestamp: (Time.now.to_f * 1000.0).to_i,
+            sensor_number: i,
+            value: flowrate[i]
+        }
+      sleep(0.1)
+    end
   end
 end
-
 
 # Calibration loop
 count = 0
@@ -92,7 +105,7 @@ stdev = 0
 calibrationon = true
 
 while calibrationon do
- reading = flowrate[0]
+  reading = flowrate[0]
   next if reading.nil?
   next if reading <= 0
   puts "Reading is #{reading} at count #{count}"
@@ -100,23 +113,18 @@ while calibrationon do
   # we are, in fact, getting consistent flow...
   #
   # we'll use the average to seed our high/low calculations next
- # if count >= 0  && count <= 100 
-    count += 1
-    tot += reading
-    average = tot/count
-    variance = (reading-average)**2/count
-    stdev = Math.sqrt(variance)
-   # puts "Flow began... average at #{average} count is #{count}"
-
- # else
-  #  puts "Awaiting flow or sensor read incorrectly..."
-   # next
- # end
+  # if count >= 0  && count <= 100
+  count += 1
+  tot += reading
+  average = tot/count
+  variance = (reading-average)**2/count
+  stdev = Math.sqrt(variance)
   if count == 2000
     puts "Calibrated after 2000 readings...average at #{average} finding systol/diastol cycles..."
   end
+
   if count >= 2000 and count < 4000
-   # set up some counters to track what the
+    # set up some counters to track what the
     # highest throughput (potential systol) and
     # lowest throughput(potential diastol)  we have seen are
     highest ||= [average.to_i]
@@ -124,7 +132,7 @@ while calibrationon do
     avg_systol = highest.reduce(:+) / highest.size
     avg_diastol = lowest.reduce(:+) / lowest.size
     # Do the actual comparison per loop maybe make it the average
-   
+
     if reading > avg_systol && stdev < 3 && stdev > -3
       highest.push(reading)
       puts "New high of #{highest} found."
@@ -133,14 +141,15 @@ while calibrationon do
       puts "New low of #{lowest} found."
     end
   end
+
   if count == 4000
-  puts "Count is #{count}"
+    puts "Count is #{count}"
     # Keep the end users busy with some shiny TEXTTT!!!!
     avg_systol = highest.reduce(:+) / highest.size
     avg_diastol = lowest.reduce(:+) / lowest.size
     puts "Proceeding with presumed systol of #{avg_systol} and presumed diastol of #{avg_diastol}..."
   end
-  if count >=4000 && count <6000
+  if count >= 4000 && count < 6000
     # set up our variables if needed
     systol_duration_total ||= 0
     systol_count ||= 0
@@ -196,54 +205,25 @@ while calibrationon do
     puts "Average systol duration at #{systol_duration_total.to_f / systol_count}s" if systol_count > 0
     puts "Average diastol duration at #{diastol_duration_total.to_f / diastol_count}s" if diastol_count > 0
   end
-  if count >=6000
-    diff_to_systol = (avg_systol - reading).abs
-    diff_to_diastol = (avg_diastol - reading).abs
-    if diff_to_systol > diff_to_diastol
-      case state
-      when :diastol
-        # we are _still_ diastol and waiting for the damn pump to switch back over
-      when :systol
-        # it switched!!! time to kick into scheduled mode!!!
-        break
-      end
-    else
-      case state
-      when :diastol
-        # it switched!!! time to kick into scheduled mode!!!
-        break
-      when :systol
-        # we are _still_ systol and waiting for the damn pump to switch back over
-      end
-    end
   calibrationon = false if count > 6000
-  end 
-
-      print "\nMotor pump Seconds ->"
-      seconds = STDIN.gets.chomp
-      print "\nValveOpen sec ->"
-      valvesec = STDIN.gets.chomp
-     if seconds =~ /\A[-+]?[0-9]*\.?[0-9]+\Z/
-        puts "Test starts for pumping #{seconds} seconds "
-
-  # Scheduled mode!!!
-  if count > 6000 && count < 20000
-    if state == :diastol
-      puts "Flipping to diastol..."
-      sleep (diastol_duration_total.to_f / diastol_count)
-      state = :systol
-    elsif state == :systol
-         puts "Test starts for pumping #{seconds} seconds "
-             motorpin.on
-             sleep seconds.to_f
-             motorpin.off
-             valvepin.on
-             sleep valvesec.to_f
-            valvepin.off
-            sleeptime = (systol_duration_total.to_f / systol_count)-seconds.to_f - valvesec.to_f
-      sleep (sleeptime)
-      state = :diastol
-    end
-  end
 end
+
+# Scheduled mode!!!
+while true do
+  if state == :diastol
+    puts "Flipping to diastol..."
+    sleep (diastol_duration_total.to_f / diastol_count)
+    state = :systol
+  elsif state == :systol
+       puts "Test starts for pumping #{seconds} seconds "
+           motorpin.on
+           sleep seconds.to_f
+           motorpin.off
+           valvepin.on
+           sleep valvesec.to_f
+          valvepin.off
+          sleeptime = (systol_duration_total.to_f / systol_count)-seconds.to_f - valvesec.to_f
+    sleep (sleeptime)
+    state = :diastol
+  end
 end
