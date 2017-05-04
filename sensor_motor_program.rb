@@ -58,7 +58,7 @@ flowrate = Array.new
 flowsensor_on = true
 running = true
 
-(0..0).each do |i |
+(0..0).each do |i|
   sensorthreads[i] = Thread.new do
         while flowsensor_on do
             value = 0
@@ -80,7 +80,7 @@ running = true
               sensor_number: i,
               value: flowrate[i]
                 }
-            sleep(0.25)
+            sleep(0.05)
      end
   end
 end
@@ -100,11 +100,11 @@ print "\nSeconds ->"
    motorpin.on
   sleep seconds.to_f
   motorpin.off
-  sleep 2
+  sleep 1
   valvepin.on
   sleep valvesec.to_f
   valvepin.off
-  sleep 5
+  sleep 1 
  end
 
   else

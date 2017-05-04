@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 
 require 'time'
+require 'typhoeus'
+require 'typhoeus/adapters/faraday'
 require 'elasticsearch'
 require 'pi_piper'
 
@@ -48,7 +50,7 @@ if !index_exists
       }, wait_for_active_shards: 1
   puts "Index created."
 end
-=begin
+
 input_valid = false
 while !input_valid do
   # Ask for values
@@ -66,7 +68,6 @@ while !input_valid do
     puts "Invalid input, please try again."
   end
 end
-=end
 
 puts "Generating data now."
 #Threading Sensor readings
@@ -84,7 +85,7 @@ running = true
         value = ((raw[1] & 3) << 8) + raw[2]
       end
       next if value == 0
-      flowrate[i] = value * 500 / 1023
+      flowrate[i] = value * 500 / 1023.0
       es.index index: 'motortest-project-index',
         type: 'sensor_data',
         body: {
@@ -92,7 +93,6 @@ running = true
             sensor_number: i,
             value: flowrate[i]
         }
-      sleep(0.01)
     end
   end
 end
@@ -104,6 +104,7 @@ average = 0
 variance = 0
 stdev = 0
 calibrationon = true
+readingarray = Array.new
 
 while calibrationon do
   reading = flowrate[0]
@@ -117,45 +118,43 @@ while calibrationon do
   # if count >= 0  && count <= 100
   count += 1
   sleep(0.01)
-  next if count <=500
+  next if count <= 250
   tot += reading
-  average = tot/(count-500)
-  variance = (reading-average)**2/(count-500)
+  average = tot/(count-250)
+  variance = (reading-average)**2/(count-250)
   stdev = Math.sqrt(variance)
-  if count == 2000
-   averagestag = average
-   puts "Calibrated after 2000 readings...average at #{average} finding systol/diastol cycles..."
-  end
+  readingarray.push(reading)
+  
 
-  if count >= 2000 and count < 4000
+  if count == 1500
+  avgarray = readingarray.uniq.reduce(:+) / readingarray.uniq.size
+  puts "Calibrated after 2000 readings...average at #{average} and avgarray #{avgarray} finding systol/diastol cycles..."
+end
+
+  if count >= 1500 and count < 3500
     # set up some counters to track what the
     # highest throughput (potential systol) and
     # lowest throughput(potential diastol)  we have seen are
-    highest ||= [averagestag.to_i]
-    lowest ||= [averagestag.to_i]
-    avg_systol = highest.reduce(:+) / highest.size
-    avg_diastol = lowest.reduce(:+) / lowest.size
+    highest ||= [average]
+    lowest ||= [average]
+    avg_systol = highest.reduce(:+) / highest.size.to_f
+    avg_diastol = lowest.reduce(:+) / lowest.size.to_f
     # Do the actual comparison per loop maybe make it the average
-
-#    if reading > avg_systol && stdev < 3 && stdev > -3
-    if reading > averagestag && stdev < 2 && stdev > -2
+    if reading > avg_systol && stdev < 2 && stdev > -2
       highest.push(reading)
       puts "New high of #{avg_systol} found."
-#    elsif reading < avg_diastol  && stdev <3 && stdev >-3
-    elsif reading < averagestag  && stdev < 2 && stdev > -2
+    elsif reading <= avg_diastol && stdev < 2 && stdev > -2
       lowest.push(reading)
       puts "New low of #{avg_diastol} found."
     end
   end
 
-  if count == 4000
+  if count == 3500
     puts "Count is #{count}"
     # Keep the end users busy with some shiny TEXTTT!!!!
-   # avg_systol = highest.reduce(:+) / highest.size
-   # avg_diastol = lowest.reduce(:+) / lowest.size
     puts "Proceeding with presumed systol of #{avg_systol} and presumed diastol of #{avg_diastol}..."
   end
-  if count >= 4000 && count < 6000
+  if count >= 3500 && count < 5000
     # set up our variables if needed
     systol_duration_total ||= 0
     systol_count ||= 0
@@ -166,12 +165,12 @@ while calibrationon do
     state ||= :none
 
     # figure out if we are nearest to systol (highest) or diastol (lowest)
-    midpoint = (avg_systol + avg_diastol)/2
+   # midpoint = (avg_systol + avg_diastol)/2
     
-   # diff_to_systol = (avg_systol - reading).abs
-   # diff_to_diastol = (avg_diastol - reading).abs
-    if reading <= midpoint  
-   # diff_to_systol > diff_to_diastol
+    diff_to_systol = (avg_systol - reading).abs * 1.2
+    diff_to_diastol = (avg_diastol - reading).abs
+   # if reading <= avg_systol  
+   if diff_to_diastol < diff_to_systol
       puts "Reading is in diastol range..."
       # we are diastol!!!
       case state
@@ -191,7 +190,7 @@ while calibrationon do
         end
       end
       state = :diastol
-    else
+    elsif diff_to_systol < diff_to_diastol
       puts "Reading is in systol range..."
       # we are systol!!!
       case state
@@ -214,9 +213,9 @@ while calibrationon do
     puts "Average systol duration at #{systol_duration_total.to_f / systol_count}s" if systol_count > 0
     puts "Average diastol duration at #{diastol_duration_total.to_f / diastol_count}s" if diastol_count > 0
   end
-  calibrationon = false if count > 6000
+  calibrationon = false if count > 5000
 end
-=begin
+
 motorpin = PiPiper::Pin.new(:pin => 4, :direction => :out)
 valvepin = PiPiper::Pin.new(:pin => 17, :direction => :out)
 
@@ -239,4 +238,3 @@ while true do
     state = :diastol
   end
 end
-=end 
