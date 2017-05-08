@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'time'
-require 'elasticsearch'
+#require 'elasticsearch'
 require 'pi_piper'
 
 def median array
@@ -12,6 +12,7 @@ end
 
 Thread.abort_on_exception = true
 
+=begin
 #Generating elasticsearch index
 es = Elasticsearch::Client.new url: ARGV[0]
 index_exists = es.indices.exists index: "motortest-project-index"
@@ -54,7 +55,7 @@ if !index_exists
       }, wait_for_active_shards: 1
   puts "Index created."
 end
-=begin
+
 
 input_valid = false
 while !input_valid do
@@ -91,16 +92,9 @@ running = true
         value = ((raw[1] & 3) << 8) + raw[2]
       end
       next if value == 0
+      previousflow = flowrate[i] if flowrate[i] != nil
       flowrate[i] = value * 500 / 1023
-      es.index index: 'motortest-project-index',
-        type: 'sensor_data',
-        body: {
-            timestamp: (Time.now.to_f * 1000.0).to_i,
-            sensor_number: i,
-            value: flowrate[i]
-        }
-
-    end
+      end
   end
 end
 
@@ -115,9 +109,10 @@ readingarray = Array.new
 
 while calibrationon do
   reading = flowrate[0]
+  previousreading = previousflow
   next if reading.nil?
   next if reading <= 0
-  puts "Reading is #{reading} at count #{count}"
+  #puts "Reading is #{reading} at count #{count}"
   # start accumulating an average for proof that
   # we are, in fact, getting consistent flow...
   #
@@ -125,14 +120,19 @@ while calibrationon do
   # if count >= 0  && count <= 100
   count += 1
   sleep(0.01)
-  next if count <=500
+  next if count <=250
   tot += reading
-  average = tot/(count-500)
-  variance = (reading-average)**2/(count-500)
+  average = tot/(count-250)
+  variance = (reading-average)**2/(count-250)
   stdev = Math.sqrt(variance)
   readingarray.push(reading)
 
- 
+  if previousreading !=nil
+    dy = reading - previousreading
+    puts "Difference is #{dy}"
+  end
+
+
 
 
 
@@ -150,7 +150,7 @@ while calibrationon do
     # lowest throughput(potential diastol)  we have seen are
    # highest ||= [averagestag]
    # lowest ||= [averagestag]
-    
+
     highest ||= [averagestag]
     lowest ||= [averagestag]
     avg_systol = median highest
@@ -177,7 +177,6 @@ while calibrationon do
    # avg_diastol = lowest.reduce(:+) / lowest.size
     puts "Proceeding with presumed systol of #{avg_systol} and presumed diastol of #{avg_diastol}..."
   end
-=end 
 
   if count >= 4000 && count < 6000
     # set up our variables if needed
@@ -191,10 +190,10 @@ while calibrationon do
 
     # figure out if we are nearest to systol (highest) or diastol (lowest)
    # midpoint = (avg_systol + avg_diastol)/2
-    
+
    # diff_to_systol = (avg_systol - reading).abs
    # diff_to_diastol = (avg_diastol - reading).abs
-    if reading <= avg_systol  
+    if reading <= avg_systol
    # diff_to_systol > diff_to_diastol
       puts "Reading is in diastol range..."
       # we are diastol!!!
