@@ -80,7 +80,9 @@ puts "Generating data now."
 #Threading Sensor readings
 sensorthreads = Array.new
 flowrate = Array.new
+previousflow = nil
 flowsensor_on = true
+
 running = true
 
 (0..0).each do |i|
@@ -106,6 +108,8 @@ variance = 0
 stdev = 0
 calibrationon = true
 readingarray = Array.new
+previousreading = 0.0
+
 
 while calibrationon do
   reading = flowrate[0]
@@ -128,11 +132,11 @@ while calibrationon do
   readingarray.push(reading)
 
   if previousreading !=nil
-    dy = reading - previousreading
-    puts "Difference is #{dy}"
+    dy = readingarray[count] - readingarray[count-1]
+    puts "Reading is #{readingarray[count]} previous is #{readingarray[count-1]}  Difference is #{dy}"
   end
 
-
+end
 
 
 
