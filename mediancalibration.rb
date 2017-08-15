@@ -161,7 +161,7 @@ while calibrationon do
   end
   calibrationon = false if count > 6000
 end
-=begin
+
 motorpin = PiPiper::Pin.new(:pin => 4, :direction => :out)
 valvepin = PiPiper::Pin.new(:pin => 17, :direction => :out)
 
@@ -172,16 +172,15 @@ while true do
     sleep (diastol_duration_total.to_f / diastol_count)
     state = :systol
   elsif state == :systol
-       puts "Test starts for pumping #{seconds} seconds "
-           motorpin.on
-           sleep seconds.to_f
-           motorpin.off
-           valvepin.on
-           sleep valvesec.to_f
-          valvepin.off
-          sleeptime = (systol_duration_total.to_f / systol_count)-seconds.to_f - valvesec.to_f
-    sleep (sleeptime)
-    state = :diastol
+       puts "Test starts for pumping"
+       motorpin.on
+       sleep(.25)
+       motorpin.off
+       valvepin.on
+      sleep (.1)
+      valvepin.off
+      sleeptime = (systol_duration_total.to_f / systol_count)-.25 - .1
+      sleep (sleeptime)
+      state = :diastol
   end
 end
-=end

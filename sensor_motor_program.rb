@@ -6,7 +6,7 @@ require 'pi_piper'
 #Thread.abort_on_exception =true
 
 
-#defining elasticsearch index
+#Defining elasticsearch index
 
 es = Elasticsearch::Client.new url: ARGV[0]
 index_exists = es.indices.exists index: "motortest-project-index"
@@ -58,21 +58,20 @@ flowrate = Array.new
 flowsensor_on = true
 running = true
 
-(0..0).each do |i|
+(0..0).each do |i|  #Change the number here when testing when more than one flow rate sensor and plug next to each other in circuit
   sensorthreads[i] = Thread.new do
         while flowsensor_on do
+            #Determining analog signal value
             value = 0
             PiPiper::Spi.begin do |spi|
               raw = spi.write [1, (8 + i) << 4, 0]
               value = ((raw[1] & 3) << 8) + raw[2]
-             # puts "The flowrate value is #{value}"
             end
-            # input correct algorithm#
+            # Determining flowrate from analog signal
             flowrate[i] = value * 500 / 1023
-           # puts "Flowrate for thread #{i} = #{flowrate[i]}"
-      # Generating sensor
 
-    next if value ==0
+  # Generating sensor data into elasticsearch
+    next if value ==0     #skips value if 0
     es.index index: 'motortest-project-index',
           type: 'sensor_data',
           body: {
@@ -85,7 +84,7 @@ running = true
   end
 end
 
-# Expeimental motor testing
+# Expeimental motor testing-- allows user input of time to have motor and valve running.
 motorpin = PiPiper::Pin.new(:pin => 4, :direction => :out)
 valvepin = PiPiper::Pin.new( :pin =>17, :direction => :out)
 while running
@@ -104,7 +103,7 @@ print "\nSeconds ->"
   valvepin.on
   sleep valvesec.to_f
   valvepin.off
-  sleep 1 
+  sleep 1
  end
 
   else
